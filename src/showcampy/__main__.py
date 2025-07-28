@@ -165,11 +165,11 @@ def build_command(
         '-o', video_download_path
     ]
 
-def read_archive(archive: Path) -> list[str]:
+def read_archive(archive: Path) -> list[int]:
     with open(archive, 'r') as file:
-        txt_list = [line.strip('pornhub').strip() for line in file.readlines() if line]
+        id_list = [int(line.strip('showcamrips').strip()) for line in file.readlines() if line]
 
-    return txt_list
+    return id_list
 
 def save_txt(path_name: Path, text_string: str) -> None:
     path_name.parent.mkdir(parents=True, exist_ok=True)
@@ -285,7 +285,7 @@ def main() -> None:
                 logging.info(f'Video {idx+1} out of {total_all_links}: {video_filename}')
                 logging.info(f'Intercepting from: {link}')
                 
-                if f'showcamrips {video_id}' not in archive:
+                if video_id not in archive:
                     actual_video_link, source_website = get_actual_video_link(link, page)
                     
                     if isinstance(actual_video_link, str):
