@@ -311,6 +311,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
-#log errors??
-#better error handling
