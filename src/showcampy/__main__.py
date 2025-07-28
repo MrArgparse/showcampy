@@ -214,7 +214,7 @@ def extract_datetime(s: str) -> str:
 
     if match:
         date, time = match.groups()
-        time = time.ljust(6, '0')  # pad with zeroes if only HHMM
+        time = time.ljust(6, '0')
         joined_date_string  = re.sub(r'-', '', date + time)
         date = datetime.strptime(joined_date_string, "%Y%m%d%H%M%S")
 
