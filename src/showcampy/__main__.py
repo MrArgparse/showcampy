@@ -11,10 +11,11 @@ import argparse
 import logging
 import msgspec
 import platformdirs
+import re
 import requests
-import tomlkit
 import subprocess
 import sys
+import tomlkit
 
 logging.basicConfig(
     level=logging.INFO, format='%(message)s', datefmt='[%X]', handlers=[RichHandler()]
@@ -208,12 +209,25 @@ def get_actual_video_link(link: str, page: Page) -> tuple[str | None, str | None
     return actual_video_link, source_website
 
 
+def extract_datetime(s: str) -> str | None:
+    match = re.search(r'(\d{4}-?\d{2}-?\d{2})[-_]?(\d{4,6})$', s)
+
+    if match:
+        date, time = match.groups()
+        time = time.ljust(6, '0')  # pad with zeroes if only HHMM
+        joined_date_string  = re.sub(r'-', '', date + time)
+        date = datetime.strptime(joined_date_string, "%Y%m%d%H%M%S")
+        return date.strftime("%Y-%m-%d-%H-%M-%S")
+    
+    
+def extract_video_id(s: str) -> str:
+    return int(re.match(r'^\d+', s).group())
+
+
 def get_video_filename(performer: str, link: str) -> tuple[int, str]:
     last_segment = get_last_url_segment(link).rstrip('.html')
-    video_id = int(last_segment.split('-')[0])
-    joined_date_string = '-'.join(last_segment.rsplit('-', 2)[-2:])
-    date = datetime.strptime(joined_date_string, "%Y%m%d-%H%M%S")
-    formatted_date = date.strftime("%Y-%m-%d-%H-%M-%S")
+    video_id = extract_video_id(last_segment)
+    formatted_date = extract_datetime(last_segment)
     filename = f'{performer} - {formatted_date} - {video_id}.mp4'
     return video_id, filename
 
@@ -297,3 +311,6 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
+#log errors??
+#better error handling
