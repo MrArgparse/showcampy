@@ -209,7 +209,7 @@ def get_actual_video_link(link: str, page: Page) -> tuple[str | None, str | None
     return actual_video_link, source_website
 
 
-def extract_datetime(s: str) -> str | None:
+def extract_datetime(s: str) -> str:
     match = re.search(r'(\d{4}-?\d{2}-?\d{2})[-_]?(\d{4,6})$', s)
 
     if match:
@@ -217,11 +217,20 @@ def extract_datetime(s: str) -> str | None:
         time = time.ljust(6, '0')  # pad with zeroes if only HHMM
         joined_date_string  = re.sub(r'-', '', date + time)
         date = datetime.strptime(joined_date_string, "%Y%m%d%H%M%S")
-        return date.strftime("%Y-%m-%d-%H-%M-%S")
-    
-    
-def extract_video_id(s: str) -> str:
-    return int(re.match(r'^\d+', s).group())
+
+        if date:
+            formatted_date = date.strftime("%Y-%m-%d-%H-%M-%S")
+
+    return formatted_date
+
+
+def extract_video_id(s: str) -> int:
+    match = re.match(r'^\d+', s)
+
+    if match:
+        group = match.group()
+
+    return int(group)
 
 
 def get_video_filename(performer: str, link: str) -> tuple[int, str]:
@@ -233,9 +242,9 @@ def get_video_filename(performer: str, link: str) -> tuple[int, str]:
 
 
 def embed_comment(video_path: Path, comment: str) -> None:
-    file = MP4(video_path)
+    file = MP4(video_path)#type: ignore
     file["\xa9cmt"] = [f'{comment}']
-    file.save()
+    file.save()#type: ignore
 
 
 def main() -> None:
