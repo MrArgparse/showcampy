@@ -255,15 +255,19 @@ def embed_comment(video_path: Path, comment: str) -> None:
     file.save()#type: ignore
 
 
-def prepare_performer_archive(url: str) -> tuple[str, Path, Path]:
-    performer = get_last_url_segment(url)
-    performer_archive_path = ARCHIVES_FOLDER / f'{performer}.txt'
-    return performer, performer_archive_path
-
-
 def touch_archive_path(performer_archive_path: Path) -> None:
     if not performer_archive_path.exists():
         save_txt(performer_archive_path, '')
+
+
+def get_performer_name(soup: BeautifulSoup) -> str:
+    model_url_element = soup.find("a", href=lambda h: h and "/model/" in h)
+
+    if model_url_element:
+        model_href = model_url_element.get('href')
+
+        if isinstance(model_href, str):
+            return get_last_url_segment(model_href)
 
 
 def main() -> None:
@@ -272,14 +276,14 @@ def main() -> None:
 
     for url in args.url:
         logging.info(f'Main URL: {url}')
-        performer, performer_archive_path  = prepare_performer_archive(url)
+        base_soup = get_document(url)
+        performer = get_performer_name(base_soup)
         all_links = []
 
         if '/show-cam-sex-movies/' in url and url.endswith('.html'):
             all_links.append(url)
         else:
             logging.info('Fetching performer info')
-            base_soup = get_document(url)
             page_links, total_pages = get_performer_pages(base_soup)
 
             for idx, page_link in enumerate(page_links):
@@ -293,6 +297,7 @@ def main() -> None:
                 links = get_all_page_urls(page_soup)
                 all_links.extend(links)
 
+        performer_archive_path  = ARCHIVES_FOLDER / f'{performer}.txt'
         total_all_links = len(all_links)
         touch_archive_path(performer_archive_path)
         archive = read_archive(performer_archive_path)
