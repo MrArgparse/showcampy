@@ -1,6 +1,6 @@
 [project]
 name = "showcampy"
-version = "0.0.1"
+version = "0.0.2"
 description = "showcampy"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -34,7 +34,6 @@ dependencies = [
   "msgspec",
   "mutagen",
   "platformdirs",
-  "playwright",
   "requests",
   "rich",
   "tomlkit"

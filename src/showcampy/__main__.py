@@ -3,7 +3,6 @@ from datetime import datetime
 from fake_useragent import UserAgent
 from mutagen.mp4 import MP4
 from pathlib import Path
-from playwright.sync_api import sync_playwright, Page, Frame
 from rich.logging import RichHandler
 from typing import Type
 from urllib.parse import urlparse
@@ -114,30 +113,34 @@ def check_path(CONFIG: DefaultConfig) -> None:
 check_path(CONFIG)
 
 
-def get_base_document(url: str) -> BeautifulSoup:
+def get_document(url: str) -> BeautifulSoup:
     r = requests.get(url)
+    r.raise_for_status()
     return BeautifulSoup(r.content, "html.parser")
 
 
-def get_performer_pages(soup: BeautifulSoup) -> list[str]:
-    pages = soup.find(class_='pages')
+def get_performer_pages(soup: BeautifulSoup) -> tuple[list[str], int]:
+    pages_elements = soup.find(class_='pages')
     
-    if isinstance(pages, Tag):
-        return [
+    if isinstance(pages_elements, Tag):
+        pages = [
             href
-            for a in pages.find_all('a')
+            for a in pages_elements.find_all('a')
             if isinstance(a, Tag)
             and isinstance((href := a.get('href')), str)
         ]
 
-    return []
+        return pages, len(pages)
+
+    return [], 0
 
 
-def get_all_video_urls(soup: BeautifulSoup) -> list[str]:
+def get_all_page_urls(soup: BeautifulSoup) -> list[str]:
     return [
         href
         for ele in soup.find_all(class_='moiclick1')
-        if isinstance(ele, Tag) and isinstance((href := ele.get("href")), str)
+        if isinstance(ele, Tag) 
+        and isinstance((href := ele.get("href")), str)
     ]
 
 
@@ -149,10 +152,10 @@ def get_last_url_segment(url: str) -> str:
 def build_command(
     url: str,
     video_download_path: Path,
-    link: str
 ) -> list[str | Path]:
     return [
         'yt-dlp', url,
+        '--no-warnings',
         '--user-agent', f'{UA}',
         '--add-header', f'Referer: {MAIN_URL}',
         '--abort-on-unavailable-fragments',
@@ -165,11 +168,13 @@ def build_command(
         '-o', video_download_path
     ]
 
+
 def read_archive(archive: Path) -> list[int]:
     with open(archive, 'r') as file:
         id_list = [int(line.strip('showcamrips').strip()) for line in file.readlines() if line]
 
     return id_list
+
 
 def save_txt(path_name: Path, text_string: str) -> None:
     path_name.parent.mkdir(parents=True, exist_ok=True)
@@ -178,35 +183,38 @@ def save_txt(path_name: Path, text_string: str) -> None:
         txt_file.write(text_string)
 
 
-def get_actual_video_link(link: str, page: Page) -> tuple[str | None, str | None]:
-    page.goto(link)
-    page.wait_for_load_state('networkidle')
-    source_website = page.locator('span.tl h3 a[href*="://www.showcamrips.com/site/"]').text_content()
-    overlay = page.query_selector(".overlay22")
-    actual_video_link = None
+def get_source_website(soup: BeautifulSoup) -> str | None:
+    span = soup.find("span", class_="tl")
 
-    if overlay:
-        page.evaluate("e => e.remove()", overlay)
+    if isinstance(span, Tag):
+        source_website_element = span.find("a", href=lambda h: h and "/site/" in h)
 
-    target_frame = None
+        if source_website_element:
+            return str(source_website_element.text)
+    
+    return None
 
-    for frame in page.frames:
 
-        if isinstance(frame, Frame):
-            if frame.query_selector("#playButton"):
-                target_frame = frame
-                break
+def test_for_status(src: str) -> int:
+    test_request = requests.head(src)
+    return test_request.status_code
 
-    if isinstance(target_frame, Frame):
-        button = target_frame.query_selector("#playButton")
 
-        if button and button.is_visible():
-            button.click(force=True)
+def get_actual_video_link(soup: BeautifulSoup) -> str | None:
+    actual_video_link = None    
+    iframe = soup.find('iframe')
 
-        target_frame.wait_for_selector("#myVideo", timeout=10000, state="attached")
-        actual_video_link = target_frame.get_attribute("#myVideo", "src")
+    if isinstance(iframe, Tag):
+        src = str(iframe.get('src'))
 
-    return actual_video_link, source_website
+        if src:
+
+            if 'loading_video' in src:
+                src = src.replace('loading_video', 'play')
+       
+            actual_video_link = src
+
+    return actual_video_link
 
 
 def extract_datetime(s: str) -> str:
@@ -247,63 +255,75 @@ def embed_comment(video_path: Path, comment: str) -> None:
     file.save()#type: ignore
 
 
+def prepare_performer_archive(url: str) -> tuple[str, Path, Path]:
+    performer = get_last_url_segment(url)
+    performer_archive_path = ARCHIVES_FOLDER / f'{performer}.txt'
+    return performer, performer_archive_path
+
+
+def touch_archive_path(performer_archive_path: Path) -> None:
+    if not performer_archive_path.exists():
+        save_txt(performer_archive_path, '')
+
+
 def main() -> None:
     parser = parse_showcampy()
     args = parser.parse_args(sys.argv[1:])
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+    for url in args.url:
+        logging.info(f'Main URL: {url}')
+        performer, performer_archive_path  = prepare_performer_archive(url)
+        all_links = []
 
-        for url in args.url:
-            logging.info(f'Main URL: {url}')
-            performer = get_last_url_segment(url)
-            performer_download_path = DL_PATH / f'{performer}'
-            performer_archive_path = ARCHIVES_FOLDER / f'{performer}.txt'
-            logging.info('Requesting base document')
-            base_soup = get_base_document(url)
-            logging.info('Fetching performer pages')
-            page_links = get_performer_pages(base_soup)
-            all_links = []
-            total_pages = len(page_links)
+        if '/show-cam-sex-movies/' in url and url.endswith('.html'):
+            all_links.append(url)
+        else:
+            logging.info('Fetching performer info')
+            base_soup = get_document(url)
+            page_links, total_pages = get_performer_pages(base_soup)
 
-            if '/show-cam-sex-movies/' in url and url.endswith('.html'):
-                all_links.append(url)
-            else:
-                if not performer_archive_path.exists():
-                    save_txt(performer_archive_path, '')
+            for idx, page_link in enumerate(page_links):
+                logging.info(f'Fetching links from page {idx+1} out of {total_pages}')
 
-                archive = read_archive(performer_archive_path)
+                if page_link == page_links[0]:
+                    page_soup = base_soup
+                else:
+                    page_soup = get_document(page_link)
 
-                for idx, page_link in enumerate(page_links):
-                    logging.info(f'Fetching links from page {idx+1} out of {total_pages}')
-                    links = []
+                links = get_all_page_urls(page_soup)
+                all_links.extend(links)
 
-                    if page_link == page_links[0]:
-                        page_soup = base_soup
+        total_all_links = len(all_links)
+        touch_archive_path(performer_archive_path)
+        archive = read_archive(performer_archive_path)
+
+        for idx, link in enumerate(all_links):
+            video_id, video_filename = get_video_filename(performer, link)
+            logging.info(f'Video {idx+1} out of {total_all_links}: {video_filename}')
+            logging.info(f'Fetching src from: {link}')
+
+            if video_id not in archive:
+                video_soup = get_document(link)
+                source_website = get_source_website(video_soup)
+                actual_video_link = get_actual_video_link(video_soup)
+
+                if actual_video_link:            
+                    status_code = test_for_status(actual_video_link)
+
+                    if status_code != 200:
+                        logging.error(f'Could not get video link: Status code: {status_code} for {actual_video_link}')
+                        continue
+
+                    if source_website:
+                            sorted_download_path = DL_PATH / source_website / performer
                     else:
-                        page_soup = get_base_document(page_link)
+                        sorted_download_path = DL_PATH / performer
+                        logging.warning('Source website not found')
 
-                    links = get_all_video_urls(page_soup)
-                    all_links.extend(links)
+                    video_download_path = sorted_download_path / video_filename
 
-            total_all_links = len(all_links)
-
-            for idx, link in enumerate(all_links):
-                video_id, video_filename = get_video_filename(performer, link)
-                logging.info(f'Video {idx+1} out of {total_all_links}: {video_filename}')
-                logging.info(f'Intercepting from: {link}')
-                
-                if video_id not in archive:
-                    actual_video_link, source_website = get_actual_video_link(link, page)
-                    
                     if isinstance(actual_video_link, str):
-
-                        if source_website:
-                            sorted_download_path = performer_download_path / source_website
-                        
-                        video_download_path = sorted_download_path / video_filename
-                        command = build_command(actual_video_link, video_download_path, link)
+                        command = build_command(actual_video_link, video_download_path)
                         subprocess.run(command)
 
                         if video_download_path.exists():
@@ -311,12 +331,10 @@ def main() -> None:
                             embed_comment(video_download_path, link)
                             logging.info('Archiving')
                             save_txt(performer_archive_path, f'showcamrips {video_id}\n')
-                    else:
-                        logging.error('Could not get video link')
-                else:
-                    logging.info(f'Video already in archive')
+            else:
+                logging.info(f'Video already in archive')
 
-            logging.info('Finished downloading playlist')
+        logging.info('Finished downloading playlist')
 
 if __name__ == '__main__':
     main()
