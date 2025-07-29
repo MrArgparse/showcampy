@@ -261,13 +261,16 @@ def touch_archive_path(performer_archive_path: Path) -> None:
 
 
 def get_performer_name(soup: BeautifulSoup) -> str:
+    performer = 'NA'
     model_url_element = soup.find("a", href=lambda h: h and "/model/" in h)
 
-    if model_url_element:
+    if isinstance(model_url_element, Tag):
         model_href = model_url_element.get('href')
 
         if isinstance(model_href, str):
-            return get_last_url_segment(model_href)
+            performer = get_last_url_segment(model_href)
+    
+    return performer
 
 
 def main() -> None:
