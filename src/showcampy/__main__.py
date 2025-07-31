@@ -116,7 +116,8 @@ check_path(CONFIG)
 def get_document(url: str) -> BeautifulSoup:
     r = requests.get(url)
     r.raise_for_status()
-    return BeautifulSoup(r.content, "html.parser")
+    headers = {'User-Agent': UA, 'Referer': {MAIN_URL}}
+    return BeautifulSoup(r.content, "html.parser", headers=headers)
 
 
 def get_performer_pages(soup: BeautifulSoup) -> tuple[list[str], int]:
@@ -199,9 +200,19 @@ def test_for_status(src: str) -> int:
     test_request = requests.head(src)
     return test_request.status_code
 
-
-def get_actual_video_link(soup: BeautifulSoup) -> str | None:
+def get_actual_video_link(src: str) -> str | None:
     actual_video_link = None    
+    soup = get_document(src)
+    video_tag = soup.find(id='myVideo')
+
+    if isinstance(video_tag, Tag):
+        actual_video_link = str(video_tag.get('src'))
+
+    return actual_video_link
+
+
+def get_play_video_link(soup: BeautifulSoup) -> str | None:
+    play_video_link = None    
     iframe = soup.find('iframe')
 
     if isinstance(iframe, Tag):
@@ -212,9 +223,9 @@ def get_actual_video_link(soup: BeautifulSoup) -> str | None:
             if 'loading_video' in src:
                 src = src.replace('loading_video', 'play')
        
-            actual_video_link = src
+            play_video_link = src
 
-    return actual_video_link
+    return play_video_link
 
 
 def extract_datetime(s: str) -> str:
@@ -308,12 +319,15 @@ def main() -> None:
         for idx, link in enumerate(all_links):
             video_id, video_filename = get_video_filename(performer, link)
             logging.info(f'Video {idx+1} out of {total_all_links}: {video_filename}')
-            logging.info(f'Fetching src from: {link}')
+            
 
             if video_id not in archive:
                 video_soup = get_document(link)
                 source_website = get_source_website(video_soup)
-                actual_video_link = get_actual_video_link(video_soup)
+                logging.info(f'Fetching play link from: {link}')
+                play_video_link = get_play_video_link(video_soup)
+                logging.info(f'Fetching src from: {play_video_link}')
+                actual_video_link = get_actual_video_link(play_video_link)
 
                 if actual_video_link:            
                     status_code = test_for_status(actual_video_link)
