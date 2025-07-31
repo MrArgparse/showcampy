@@ -114,7 +114,7 @@ check_path(CONFIG)
 
 
 def get_document(url: str) -> BeautifulSoup:
-    headers = {'User-Agent': UA, 'Referer': {MAIN_URL}}
+    headers = {'User-Agent': UA, 'Referer': MAIN_URL}
     r = requests.get(url, headers=headers)
     r.raise_for_status()
     return BeautifulSoup(r.content, "html.parser")
