@@ -114,10 +114,10 @@ check_path(CONFIG)
 
 
 def get_document(url: str) -> BeautifulSoup:
-    r = requests.get(url)
-    r.raise_for_status()
     headers = {'User-Agent': UA, 'Referer': {MAIN_URL}}
-    return BeautifulSoup(r.content, "html.parser", headers=headers)
+    r = requests.get(url, headers=headers)
+    r.raise_for_status()
+    return BeautifulSoup(r.content, "html.parser")
 
 
 def get_performer_pages(soup: BeautifulSoup) -> tuple[list[str], int]:
