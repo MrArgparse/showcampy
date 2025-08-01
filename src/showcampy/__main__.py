@@ -327,14 +327,17 @@ def main() -> None:
                 logging.info(f'Fetching play link from: {link}')
                 play_video_link = get_play_video_link(video_soup)
                 logging.info(f'Fetching src from: {play_video_link}')
+
+                if play_video_link:            
+                    status_code = test_for_status(play_video_link)
+
+                    if status_code != 200:
+                        logging.error(f'Could not get video link: Status code: {status_code} for {play_video_link}')
+                        continue
+      
                 actual_video_link = get_actual_video_link(play_video_link)
 
                 if actual_video_link:            
-                    status_code = test_for_status(actual_video_link)
-
-                    if status_code != 200:
-                        logging.error(f'Could not get video link: Status code: {status_code} for {actual_video_link}')
-                        continue
 
                     if source_website:
                             sorted_download_path = DL_PATH / source_website / performer
