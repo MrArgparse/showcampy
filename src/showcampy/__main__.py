@@ -21,7 +21,15 @@ logging.basicConfig(
 )
 
 PLATFORMDIRS = platformdirs.PlatformDirs(appname='showcampy', appauthor=False)
-CONFIG_FOLDER = PLATFORMDIRS.user_config_path
+
+def is_unraid() -> bool:
+    return Path("/etc/unraid-version").is_file()
+
+if is_unraid():
+    CONFIG_FOLDER = Path("/boot/config/showcampy")
+else:
+    CONFIG_FOLDER = PLATFORMDIRS.user_config_path
+
 DEFAULT_CONFIGURATION_PATH = CONFIG_FOLDER / 'showcampy_config.toml'
 DEFAULT_ENCODING = 'utf-8'
 DEFAULT_SAVE_PATH = PLATFORMDIRS.user_downloads_path / 'showcamrips'
@@ -172,7 +180,7 @@ def build_command(
 
 def read_archive(archive: Path) -> list[int]:
     with open(archive, 'r') as file:
-        id_list = [int(line.strip('showcamrips').strip()) for line in file.readlines() if line]
+        id_list = [int(line.split()[1]) for line in file if line.strip()]
 
     return id_list
 
