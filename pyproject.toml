@@ -1,6 +1,6 @@
 [project]
 name = "showcampy"
-version = "0.0.5"
+version = "0.0.6"
 description = "showcampy"
 readme = "README.md"
 requires-python = ">=3.11"
